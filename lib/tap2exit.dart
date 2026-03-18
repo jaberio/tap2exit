@@ -4,6 +4,9 @@
 /// a message is displayed (via SnackBar or native Android Toast). On a second
 /// press within a configurable duration, the app exits.
 ///
+/// Supports Android 14+ predictive back gestures automatically — a native
+/// `OnBackInvokedCallback` intercepts back events even on the root route.
+///
 /// ## Usage
 ///
 /// ```dart
@@ -30,6 +33,9 @@ class Tap2ExitPlatform {
   static const MethodChannel _channel =
       MethodChannel('com.example.tap2exit/exit');
 
+  /// Returns the shared [MethodChannel] so the widget can set a call handler.
+  static MethodChannel get channel => _channel;
+
   /// Exits the app using platform-safe methods.
   ///
   /// On Android, this calls `Activity.finishAffinity()`.
@@ -50,6 +56,27 @@ class Tap2ExitPlatform {
       await _channel.invokeMethod<void>('showToast', {'message': message});
     } on PlatformException catch (_) {
       // Silently handle – not available on iOS.
+    }
+  }
+
+  /// Registers a native `OnBackInvokedCallback` on Android 13+ (API 33+).
+  ///
+  /// This ensures that back events are forwarded to Flutter even on the root
+  /// route when `enableOnBackInvokedCallback="true"` is set in the manifest.
+  static Future<void> enableBackInterception() async {
+    try {
+      await _channel.invokeMethod<void>('enableBackInterception');
+    } on PlatformException catch (_) {
+      // Not available – legacy back handling will be used.
+    }
+  }
+
+  /// Unregisters the native `OnBackInvokedCallback`.
+  static Future<void> disableBackInterception() async {
+    try {
+      await _channel.invokeMethod<void>('disableBackInterception');
+    } on PlatformException catch (_) {
+      // Silently handle.
     }
   }
 }
@@ -115,6 +142,11 @@ class Tap2ExitSnackBarStyle {
 /// presses. On the first press a message is shown (SnackBar by default, or
 /// native Android Toast when [useToast] is `true`). If the user presses back
 /// again within [duration], the app exits.
+///
+/// On **Android 14+** with `enableOnBackInvokedCallback="true"` set in the
+/// manifest, this widget automatically registers a native
+/// `OnBackInvokedCallback` to intercept back events even on the root route
+/// (where Flutter's `PopScope` would otherwise not fire).
 ///
 /// {@tool snippet}
 /// ```dart
@@ -191,6 +223,44 @@ class Tap2Exit extends StatefulWidget {
 class _Tap2ExitState extends State<Tap2Exit> {
   DateTime? _lastBackPressTime;
 
+  @override
+  void initState() {
+    super.initState();
+    _setupNativeBackInterception();
+  }
+
+  @override
+  void dispose() {
+    _teardownNativeBackInterception();
+    super.dispose();
+  }
+
+  /// On Android, registers a native `OnBackInvokedCallback` via the platform
+  /// channel and listens for `"onBackPressed"` invocations from the native
+  /// side. This is the path used on Android 14+ with predictive back enabled.
+  void _setupNativeBackInterception() {
+    if (kIsWeb) return;
+    if (!Platform.isAndroid) return;
+
+    // Listen for back events forwarded from the native callback.
+    Tap2ExitPlatform.channel.setMethodCallHandler((call) async {
+      if (call.method == 'onBackPressed') {
+        _handleBackPress();
+      }
+    });
+
+    // Ask the native side to register the OnBackInvokedCallback.
+    Tap2ExitPlatform.enableBackInterception();
+  }
+
+  void _teardownNativeBackInterception() {
+    if (kIsWeb) return;
+    if (!Platform.isAndroid) return;
+
+    Tap2ExitPlatform.disableBackInterception();
+    Tap2ExitPlatform.channel.setMethodCallHandler(null);
+  }
+
   Future<void> _handleBackPress() async {
     final now = DateTime.now();
     final lastPress = _lastBackPressTime;
@@ -264,6 +334,10 @@ class _Tap2ExitState extends State<Tap2Exit> {
 
   @override
   Widget build(BuildContext context) {
+    // PopScope is kept as a fallback for:
+    //  • Apps without `enableOnBackInvokedCallback="true"` in the manifest.
+    //  • Pre-API-33 Android devices (legacy back handling).
+    //  • iOS & web.
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (bool didPop, dynamic result) {
