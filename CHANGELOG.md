@@ -1,3 +1,7 @@
+## 1.2.1
+
+* **Feature**: Added macOS native plugin with Swift Package Manager (SPM) support.
+
 ## 1.2.0
 
 * **Feature**: Added support for Web, Windows, macOS, and Linux platforms.
