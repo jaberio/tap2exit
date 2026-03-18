@@ -1,6 +1,6 @@
 name: tap2exit
 description: A Flutter plugin providing double-tap-to-exit functionality for Android with native Toast support and safe iOS handling.
-version: 1.1.0
+version: 1.2.0
 homepage: https://github.com/jaberio/tap2exit
 repository: https://github.com/jaberio/tap2exit
 issue_tracker: https://github.com/jaberio/tap2exit/issues
@@ -31,3 +31,15 @@ flutter:
         pluginClass: Tap2exitPlugin
       ios:
         pluginClass: Tap2exitPlugin
+      web:
+        pluginClass: none
+        fileName: tap2exit.dart
+      windows:
+        pluginClass: none
+        fileName: tap2exit.dart
+      macos:
+        pluginClass: none
+        fileName: tap2exit.dart
+      linux:
+        pluginClass: none
+        fileName: tap2exit.dart

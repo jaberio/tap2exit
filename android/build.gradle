@@ -1,5 +1,5 @@
 group 'com.example.tap2exit'
-version '1.1.0'
+version '1.2.0'
 
 buildscript {
     repositories {

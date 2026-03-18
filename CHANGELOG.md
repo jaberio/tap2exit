@@ -1,3 +1,9 @@
+## 1.2.0
+
+* **Feature**: Added support for Web, Windows, macOS, and Linux platforms.
+* **Feature**: Added Swift Package Manager (SPM) support for iOS.
+* **Fix**: Fixed unconditional `dart:io` import that prevented web compilation.
+
 ## 1.1.0
 
 * **Fix**: Fixed Android Kotlin crash when activity is null.

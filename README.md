@@ -21,7 +21,7 @@ Add `tap2exit` to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  tap2exit: ^1.1.0
+  tap2exit: ^1.2.0
 ```
 
 Then run:

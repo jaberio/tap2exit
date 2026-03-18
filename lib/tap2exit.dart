@@ -18,7 +18,9 @@
 /// ```
 library tap2exit;
 
-import 'dart:io' show Platform;
+import 'src/platform_stub.dart'
+    if (dart.library.io) 'src/platform_io.dart'
+    if (dart.library.html) 'src/platform_web.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -240,7 +242,7 @@ class _Tap2ExitState extends State<Tap2Exit> {
   /// side. This is the path used on Android 14+ with predictive back enabled.
   void _setupNativeBackInterception() {
     if (kIsWeb) return;
-    if (!Platform.isAndroid) return;
+    if (!isAndroid) return;
 
     // Listen for back events forwarded from the native callback.
     Tap2ExitPlatform.channel.setMethodCallHandler((call) async {
@@ -255,7 +257,7 @@ class _Tap2ExitState extends State<Tap2Exit> {
 
   void _teardownNativeBackInterception() {
     if (kIsWeb) return;
-    if (!Platform.isAndroid) return;
+    if (!isAndroid) return;
 
     Tap2ExitPlatform.disableBackInterception();
     Tap2ExitPlatform.channel.setMethodCallHandler(null);
@@ -280,7 +282,7 @@ class _Tap2ExitState extends State<Tap2Exit> {
   void _showMessage() {
     if (widget.customMessageWidget != null) {
       _showCustomOverlay();
-    } else if (widget.useToast && !kIsWeb && Platform.isAndroid) {
+    } else if (widget.useToast && !kIsWeb && isAndroid) {
       // Native Toast is only available on Android.
       // On iOS / web, fall back to SnackBar so the user always sees feedback.
       Tap2ExitPlatform.showToast(widget.message);
