@@ -1,3 +1,11 @@
+## 1.3.0
+
+* **Fix**: Fixed double-firing on Android 13+ where both native `OnBackInvokedCallback` and `PopScope` intercepted the same back press. A `_nativeBackActive` flag now dynamically sets `canPop` based on whether native interception was registered.
+* **Fix**: Fixed app closing directly without double-tap when `enableOnBackInvokedCallback="true"` is set but no native callback was registered.
+* **Feature**: Added toast customisation — `toastDuration` (`ToastDuration.short` / `.long`) and `toastGravity` (`ToastGravity.bottom` / `.center` / `.top`).
+* **Feature**: Added `onBackFirstPress` callback — when provided, replaces native Toast entirely so users can show SnackBar, overlay, or any custom Dart UI.
+* **Docs**: Added prominent Android 13+ manifest setup instructions to README.
+
 ## 1.2.1
 
 * **Feature**: Added macOS native plugin with Swift Package Manager (SPM) support.

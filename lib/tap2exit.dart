@@ -26,6 +26,39 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+// ── Toast enums ──────────────────────────────────────────────────────────
+
+/// Controls how long the native Android Toast is displayed.
+enum ToastDuration {
+  /// Displays for approximately 2 seconds (`Toast.LENGTH_SHORT`).
+  short,
+
+  /// Displays for approximately 3.5 seconds (`Toast.LENGTH_LONG`).
+  long,
+}
+
+/// Controls where the native Android Toast appears on screen.
+///
+/// Maps to the corresponding `android.view.Gravity` constants.
+enum ToastGravity {
+  /// Bottom of the screen — the default Android Toast position.
+  bottom(0x50), // Gravity.BOTTOM
+
+  /// Centre of the screen.
+  center(0x11), // Gravity.CENTER
+
+  /// Top of the screen.
+  top(0x30); // Gravity.TOP
+
+  /// Creates a [ToastGravity] with the given Android `Gravity` constant.
+  const ToastGravity(this.value);
+
+  /// The raw Android `Gravity` integer value.
+  final int value;
+}
+
+// ── Platform channel ─────────────────────────────────────────────────────
+
 /// Provides static access to the platform channel for exiting the app and
 /// showing native Toast messages.
 class Tap2ExitPlatform {
@@ -52,10 +85,21 @@ class Tap2ExitPlatform {
 
   /// Shows a native Toast message on Android.
   ///
+  /// [toastDuration] controls display length (`LENGTH_SHORT` vs `LENGTH_LONG`).
+  /// [toastGravity] controls positioning (bottom, center, or top).
+  ///
   /// On iOS, this is a safe no-op.
-  static Future<void> showToast(String message) async {
+  static Future<void> showToast(
+    String message, {
+    ToastDuration toastDuration = ToastDuration.short,
+    ToastGravity? toastGravity,
+  }) async {
     try {
-      await _channel.invokeMethod<void>('showToast', {'message': message});
+      await _channel.invokeMethod<void>('showToast', {
+        'message': message,
+        'isLong': toastDuration == ToastDuration.long,
+        if (toastGravity != null) 'gravity': toastGravity.value,
+      });
     } on PlatformException catch (_) {
       // Silently handle – not available on iOS.
     }
@@ -65,11 +109,16 @@ class Tap2ExitPlatform {
   ///
   /// This ensures that back events are forwarded to Flutter even on the root
   /// route when `enableOnBackInvokedCallback="true"` is set in the manifest.
-  static Future<void> enableBackInterception() async {
+  ///
+  /// Returns `true` if the native callback was successfully registered,
+  /// `false` otherwise (pre-API 33 or non-Android).
+  static Future<bool> enableBackInterception() async {
     try {
-      await _channel.invokeMethod<void>('enableBackInterception');
+      final result =
+          await _channel.invokeMethod<bool>('enableBackInterception');
+      return result ?? false;
     } on PlatformException catch (_) {
-      // Not available – legacy back handling will be used.
+      return false;
     }
   }
 
@@ -82,6 +131,8 @@ class Tap2ExitPlatform {
     }
   }
 }
+
+// ── SnackBar style ───────────────────────────────────────────────────────
 
 /// Configuration for the SnackBar appearance shown on the first back press.
 ///
@@ -138,6 +189,8 @@ class Tap2ExitSnackBarStyle {
   final double? elevation;
 }
 
+// ── Main widget ──────────────────────────────────────────────────────────
+
 /// A widget that provides double-tap-to-exit functionality.
 ///
 /// Wrap your top-level page widget with [Tap2Exit] to intercept back button
@@ -145,10 +198,14 @@ class Tap2ExitSnackBarStyle {
 /// native Android Toast when [useToast] is `true`). If the user presses back
 /// again within [duration], the app exits.
 ///
-/// On **Android 14+** with `enableOnBackInvokedCallback="true"` set in the
+/// On **Android 13+** with `enableOnBackInvokedCallback="true"` set in the
 /// manifest, this widget automatically registers a native
 /// `OnBackInvokedCallback` to intercept back events even on the root route
 /// (where Flutter's `PopScope` would otherwise not fire).
+///
+/// The widget dynamically sets `PopScope.canPop` based on whether native
+/// interception was successfully registered, preventing back events from
+/// double-firing.
 ///
 /// {@tool snippet}
 /// ```dart
@@ -174,8 +231,11 @@ class Tap2Exit extends StatefulWidget {
     this.message = 'Press back again to exit',
     this.duration = const Duration(seconds: 2),
     this.useToast = false,
+    this.toastDuration = ToastDuration.short,
+    this.toastGravity,
     this.onExit,
     this.onFirstBackPress,
+    this.onBackFirstPress,
     this.snackBarStyle,
     this.customMessageWidget,
   });
@@ -199,11 +259,32 @@ class Tap2Exit extends StatefulWidget {
   /// since native Toast is not available.
   final bool useToast;
 
+  /// Controls how long the native Toast is displayed.
+  ///
+  /// Only applies when [useToast] is `true`. Defaults to [ToastDuration.short].
+  final ToastDuration toastDuration;
+
+  /// Controls where the native Toast appears on screen.
+  ///
+  /// Only applies when [useToast] is `true`. When `null`, Android uses its
+  /// default position (bottom of the screen).
+  final ToastGravity? toastGravity;
+
   /// Optional callback executed just before the app exits.
   final VoidCallback? onExit;
 
   /// Optional callback executed on the first back press.
   final VoidCallback? onFirstBackPress;
+
+  /// Optional callback that **replaces** the default message UI entirely.
+  ///
+  /// When provided and [useToast] is `true`, this callback is invoked instead
+  /// of showing a native Toast. Use it to show a SnackBar, overlay, bottom
+  /// sheet, or any custom Dart UI in response to the first back press.
+  ///
+  /// The [BuildContext] is provided so you can use `ScaffoldMessenger.of`,
+  /// `showDialog`, etc.
+  final void Function(BuildContext context)? onBackFirstPress;
 
   /// Optional styling configuration for the SnackBar.
   ///
@@ -225,6 +306,12 @@ class Tap2Exit extends StatefulWidget {
 class _Tap2ExitState extends State<Tap2Exit> {
   DateTime? _lastBackPressTime;
 
+  /// Whether a native `OnBackInvokedCallback` is actively intercepting back
+  /// events. When `true`, `PopScope.canPop` is set to `true` so it stays out
+  /// of the way (only the native callback fires). When `false`, `PopScope`
+  /// handles back presses via `onPopInvokedWithResult`.
+  bool _nativeBackActive = false;
+
   @override
   void initState() {
     super.initState();
@@ -239,7 +326,10 @@ class _Tap2ExitState extends State<Tap2Exit> {
 
   /// On Android, registers a native `OnBackInvokedCallback` via the platform
   /// channel and listens for `"onBackPressed"` invocations from the native
-  /// side. This is the path used on Android 14+ with predictive back enabled.
+  /// side. This is the path used on Android 13+ with predictive back enabled.
+  ///
+  /// If registration succeeds, `_nativeBackActive` is set to `true` and
+  /// `PopScope.canPop` becomes `true` — preventing double-fire.
   void _setupNativeBackInterception() {
     if (kIsWeb) return;
     if (!isAndroid) return;
@@ -252,7 +342,14 @@ class _Tap2ExitState extends State<Tap2Exit> {
     });
 
     // Ask the native side to register the OnBackInvokedCallback.
-    Tap2ExitPlatform.enableBackInterception();
+    // The result tells us whether native interception is active.
+    Tap2ExitPlatform.enableBackInterception().then((registered) {
+      if (mounted) {
+        setState(() {
+          _nativeBackActive = registered;
+        });
+      }
+    });
   }
 
   void _teardownNativeBackInterception() {
@@ -280,12 +377,23 @@ class _Tap2ExitState extends State<Tap2Exit> {
   }
 
   void _showMessage() {
+    // If the user provided onBackFirstPress, it replaces ALL default message
+    // UI (Toast, SnackBar, overlay) entirely.
+    if (widget.onBackFirstPress != null) {
+      widget.onBackFirstPress!(context);
+      return;
+    }
+
     if (widget.customMessageWidget != null) {
       _showCustomOverlay();
     } else if (widget.useToast && !kIsWeb && isAndroid) {
       // Native Toast is only available on Android.
       // On iOS / web, fall back to SnackBar so the user always sees feedback.
-      Tap2ExitPlatform.showToast(widget.message);
+      Tap2ExitPlatform.showToast(
+        widget.message,
+        toastDuration: widget.toastDuration,
+        toastGravity: widget.toastGravity,
+      );
     } else {
       _showSnackBar();
     }
@@ -336,12 +444,14 @@ class _Tap2ExitState extends State<Tap2Exit> {
 
   @override
   Widget build(BuildContext context) {
-    // PopScope is kept as a fallback for:
-    //  • Apps without `enableOnBackInvokedCallback="true"` in the manifest.
-    //  • Pre-API-33 Android devices (legacy back handling).
-    //  • iOS & web.
+    // When native back is active (API 33+), canPop = true makes PopScope a
+    // no-op — only the native OnBackInvokedCallback fires, preventing
+    // double-fire.
+    //
+    // When native back is NOT active (pre-API 33, iOS, web), canPop = false
+    // and PopScope handles back presses via onPopInvokedWithResult.
     return PopScope(
-      canPop: false,
+      canPop: _nativeBackActive,
       onPopInvokedWithResult: (bool didPop, dynamic result) {
         if (!didPop) {
           _handleBackPress();

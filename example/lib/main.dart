@@ -39,8 +39,11 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   bool _useToast = false;
+  bool _useCustomCallback = false;
   double _durationSeconds = 2.0;
   String _message = 'Press back again to exit';
+  ToastDuration _toastDuration = ToastDuration.short;
+  ToastGravity _toastGravity = ToastGravity.bottom;
   late final TextEditingController _messageController;
 
   @override
@@ -63,6 +66,28 @@ class _HomePageState extends State<HomePage> {
       message: _message,
       duration: Duration(milliseconds: (_durationSeconds * 1000).round()),
       useToast: _useToast,
+      toastDuration: _toastDuration,
+      toastGravity: _toastGravity,
+      onBackFirstPress: _useCustomCallback
+          ? (context) {
+              ScaffoldMessenger.of(context)
+                ..clearSnackBars()
+                ..showSnackBar(
+                  SnackBar(
+                    content: Text(_message),
+                    behavior: SnackBarBehavior.floating,
+                    backgroundColor: colorScheme.tertiary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                );
+            }
+          : null,
       onFirstBackPress: () {
         debugPrint('[tap2exit] First back press detected');
       },
@@ -118,9 +143,67 @@ class _HomePageState extends State<HomePage> {
             Card(
               child: SwitchListTile(
                 title: const Text('Use native Toast'),
-                subtitle: const Text('Android only — falls back to SnackBar on iOS'),
+                subtitle:
+                    const Text('Android only — falls back to SnackBar on iOS'),
                 value: _useToast,
                 onChanged: (value) => setState(() => _useToast = value),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // ── Toast duration toggle ─────────────────────
+            Card(
+              child: SwitchListTile(
+                title: const Text('Long toast duration'),
+                subtitle: Text(
+                  _toastDuration == ToastDuration.long
+                      ? '≈ 3.5 seconds'
+                      : '≈ 2 seconds (default)',
+                ),
+                value: _toastDuration == ToastDuration.long,
+                onChanged: _useToast
+                    ? (value) => setState(() => _toastDuration =
+                        value ? ToastDuration.long : ToastDuration.short)
+                    : null,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // ── Toast gravity selector ────────────────────
+            Card(
+              child: ListTile(
+                title: const Text('Toast gravity'),
+                subtitle: const Text('Where the toast appears on screen'),
+                trailing: DropdownButton<ToastGravity>(
+                  value: _toastGravity,
+                  onChanged: _useToast
+                      ? (value) {
+                          if (value != null) {
+                            setState(() => _toastGravity = value);
+                          }
+                        }
+                      : null,
+                  items: ToastGravity.values
+                      .map((g) => DropdownMenuItem(
+                            value: g,
+                            child: Text(g.name),
+                          ))
+                      .toList(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // ── Custom callback toggle ────────────────────
+            Card(
+              child: SwitchListTile(
+                title: const Text('Custom first-press callback'),
+                subtitle: const Text(
+                  'Replaces Toast with a custom SnackBar via onBackFirstPress',
+                ),
+                value: _useCustomCallback,
+                onChanged: (value) =>
+                    setState(() => _useCustomCallback = value),
               ),
             ),
             const SizedBox(height: 12),

@@ -16,10 +16,13 @@ import io.flutter.plugin.common.MethodChannel.Result
  *
  * Provides methods via a MethodChannel:
  * - `exitApp`                 : safely closes the app using `Activity.finishAffinity()`.
- * - `showToast`               : displays a native Android Toast message.
+ * - `showToast`               : displays a native Android Toast message with optional
+ *                                duration (`isLong`) and gravity customisation.
  * - `enableBackInterception`  : registers an `OnBackInvokedCallback` (API 33+) so that
  *                               back events on the root route are forwarded to Flutter
  *                               instead of letting the OS exit the app.
+ *                               Returns `true` if the callback was registered, `false`
+ *                               otherwise (pre-API 33).
  * - `disableBackInterception` : unregisters the callback.
  */
 class Tap2exitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
@@ -76,13 +79,20 @@ class Tap2exitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
             }
             "showToast" -> {
                 val message = call.argument<String>("message")
+                val isLong = call.argument<Boolean>("isLong") ?: false
+                val gravity = call.argument<Int>("gravity")
                 val currentActivity = activity
                 if (message != null && currentActivity != null) {
-                    Toast.makeText(
+                    val toast = Toast.makeText(
                         currentActivity.applicationContext,
                         message,
-                        Toast.LENGTH_SHORT
-                    ).show()
+                        if (isLong) Toast.LENGTH_LONG else Toast.LENGTH_SHORT
+                    )
+                    if (gravity != null) {
+                        @Suppress("DEPRECATION")
+                        toast.setGravity(gravity, 0, 0)
+                    }
+                    toast.show()
                     result.success(null)
                 } else {
                     result.error(
@@ -93,8 +103,8 @@ class Tap2exitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 }
             }
             "enableBackInterception" -> {
-                registerBackCallback()
-                result.success(null)
+                val registered = registerBackCallback()
+                result.success(registered)
             }
             "disableBackInterception" -> {
                 unregisterBackCallback()
@@ -106,12 +116,18 @@ class Tap2exitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
 
     // ── Predictive-back helpers (API 33+) ────────────────────────────────
 
-    private fun registerBackCallback() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        val currentActivity = activity ?: return
+    /**
+     * Registers an [OnBackInvokedCallback] on API 33+.
+     *
+     * @return `true` if the callback was successfully registered, `false` if
+     *         the device is pre-API 33 or the activity is unavailable.
+     */
+    private fun registerBackCallback(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
+        val currentActivity = activity ?: return false
 
         // Avoid double-registration.
-        if (backCallback != null) return
+        if (backCallback != null) return true
 
         val callback = android.window.OnBackInvokedCallback {
             // Forward the back event to Flutter so the Dart-side
@@ -123,6 +139,7 @@ class Tap2exitPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
             callback
         )
         backCallback = callback
+        return true
     }
 
     private fun unregisterBackCallback() {
