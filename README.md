@@ -36,7 +36,7 @@ Add `tap2exit` to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  tap2exit: ^1.3.0
+  tap2exit: ^1.3.1
 ```
 
 Then run:
@@ -116,13 +116,12 @@ Tap2Exit(
 )
 ```
 
-### Custom First-Press UI (replaces Toast)
+### Custom First-Press UI
 
 Use `onBackFirstPress` to replace the default Toast/SnackBar with any Dart UI:
 
 ```dart
 Tap2Exit(
-  useToast: true,
   onBackFirstPress: (context) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Tap back again to exit')),

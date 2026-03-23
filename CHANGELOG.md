@@ -1,3 +1,8 @@
+## 1.3.1
+
+* **Docs**: Fixed misleading README example that showed unnecessary `useToast: true` when using `onBackFirstPress`.
+* **CI**: Added GitHub Actions workflow for automated pub.dev publishing on version tags.
+
 ## 1.3.0
 
 * **Fix**: Fixed double-firing on Android 13+ where both native `OnBackInvokedCallback` and `PopScope` intercepted the same back press. A `_nativeBackActive` flag now dynamically sets `canPop` based on whether native interception was registered.
